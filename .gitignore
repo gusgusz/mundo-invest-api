@@ -1,0 +1,35 @@
+# Variáveis de ambiente
+.env
+.env.local
+.env.*.local
+
+# Documentação interna / auxiliar (não faz parte do repositório público)
+COMO_FUNCIONA.md
+
+# Coleção Postman (contém URLs e dados de ambiente local)
+*.postman_collection.json
+
+# Terraform — NUNCA commitar state ou credenciais
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/tfplan
+terraform/*.tfvars
+# Exceção: o arquivo de exemplo pode ser commitado
+!terraform/terraform.tfvars.example
+
+# Binários compilados
+server
+*.exe
+*.out
+
+# Coverage
+coverage.out
+coverage.html
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store

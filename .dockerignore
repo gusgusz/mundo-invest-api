@@ -1,0 +1,27 @@
+# Binaries / build output
+server
+*.exe
+*.out
+
+# Go test cache
+*.test
+*.bench
+
+# Local environment
+.env
+.env.local
+
+# Docker
+docker-compose.override.yml
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Terraform state (never in image)
+terraform/
+.terraform/
+*.tfstate
+*.tfstate.backup

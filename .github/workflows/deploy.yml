@@ -1,0 +1,116 @@
+name: CD — Deploy to ECS
+
+# Roda apenas quando o CI passa no branch main (merge de PR)
+on:
+  workflow_run:
+    workflows: ["CI — Test & Build"]
+    types: [completed]
+    branches: [main]
+
+# Alternativa: descomentar para deploy ao fazer push direto na main
+# on:
+#   push:
+#     branches: [main]
+
+env:
+  AWS_REGION:       us-east-1
+  ECR_REPOSITORY:   mundo-invest-api
+  ECS_CLUSTER:      mundo-invest-cluster
+  ECS_SERVICE:      mundo-invest-service
+  CONTAINER_NAME:   mundo-invest
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    # Só roda se o CI anterior passou
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    # Permissões mínimas para OIDC (sem chave de acesso estática!)
+    permissions:
+      id-token: write   # para assumir a role IAM via OIDC
+      contents: read
+
+    environment:
+      name: production
+      url: https://api.mundoinvest.com.br  # ajuste para o seu domínio
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # ── Autenticação AWS via OIDC (sem segredos de longa vida!) ──────────
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── Login no ECR ──────────────────────────────────────────────────────
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Build e push da imagem ────────────────────────────────────────────
+      - name: Build, tag and push Docker image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          # sha curto para rastreabilidade (ex: sha-a1b2c3d)
+          IMAGE_TAG: sha-${{ github.sha }}
+        run: |
+          docker build \
+            --cache-from $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            .
+
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          # Exporta a URL completa para os próximos steps
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # ── Atualiza a Task Definition com a nova imagem ──────────────────────
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_SERVICE }} \
+            --query taskDefinition \
+            > task-definition.json
+
+      - name: Render new task definition with updated image
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      # ── Deploy no ECS com circuit breaker ────────────────────────────────
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition:      ${{ steps.render-task-def.outputs.task-definition }}
+          service:              ${{ env.ECS_SERVICE }}
+          cluster:              ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true  # falha o job se o deploy não estabilizar
+
+      # ── Notificação de sucesso (opcional: Slack/Discord) ──────────────────
+      - name: Notify deploy success
+        if: success()
+        run: |
+          echo "Deploy realizado com sucesso!"
+          echo "Imagem: ${{ steps.build-image.outputs.image }}"
+          echo "Ambiente: production"
+          # curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          #   -H 'Content-type: application/json' \
+          #   --data '{"text":"✅ Deploy *mundo-invest-api* concluído — ${{ github.sha }}"}'
+
+      - name: Notify deploy failure
+        if: failure()
+        run: |
+          echo "::error::Deploy falhou! O ECS circuit breaker pode ter acionado rollback automático."
+          # Envie alerta para Slack/PagerDuty aqui

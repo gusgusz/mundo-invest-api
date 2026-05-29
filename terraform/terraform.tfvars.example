@@ -1,0 +1,32 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# terraform.tfvars.example
+# Copie para terraform.tfvars e preencha os valores reais.
+# NUNCA commite o terraform.tfvars — ele está no .gitignore.
+# ─────────────────────────────────────────────────────────────────────────────
+
+project     = "mundo-invest"
+environment = "production"
+aws_region  = "us-east-1"
+
+availability_zones = ["us-east-1a", "us-east-1b"]
+vpc_cidr           = "10.0.0.0/16"
+
+# Obtenha o ARN com: aws acm list-certificates --region us-east-1
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+db_name              = "mundoinvest"
+db_username          = "mundoinvest"
+db_password          = "TROQUE_POR_SENHA_FORTE"
+db_instance_class    = "db.t3.medium"
+db_allocated_storage = 20
+
+pipefy_token   = "COLE_SEU_PIPEFY_TOKEN_AQUI"
+pipefy_pipe_id = "COLE_O_ID_DO_SEU_PIPE"
+
+container_port = 8080
+image_tag      = "latest"
+task_cpu       = "256"
+task_memory    = "512"
+desired_count  = 2
+min_capacity   = 1
+max_capacity   = 10
